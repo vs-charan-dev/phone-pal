@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PhonePal</string>
+    <string name="share_label">Save to PhonePal</string>
+    <string name="a11y_description">Your personal PhonePal tracker. It reads the screen of X, Instagram, Reddit, LinkedIn and YouTube to count the posts you read, auto-save posts and videos you like, and power the floating save bubble. Everything stays in a database on this phone. Only items you save are sent to Gemini to be summarized.</string>
+</resources>

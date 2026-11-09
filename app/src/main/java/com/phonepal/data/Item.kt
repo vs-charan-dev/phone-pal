@@ -5,7 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** APP = text captured from another app's screen (Instagram, Reddit, LinkedIn…). */
-enum class Source { YOUTUBE, X, WEB, APP, NOTE }
+enum class Source { YOUTUBE, X, WEB, APP, NOTE, INSTAGRAM }
 
 enum class Status { QUEUED, FETCHING, SUMMARIZING, DONE, FAILED }
 

@@ -143,6 +143,7 @@ val Source.label: String
         Source.WEB -> "Web"
         Source.APP -> "Apps"
         Source.NOTE -> "Notes"
+        Source.INSTAGRAM -> "Instagram"
     }
 
 @Composable
@@ -216,7 +217,7 @@ private fun EmptyState(filtered: Boolean) {
         Text(if (filtered) "No matches" else "Nothing saved yet", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         if (!filtered) Text(
-            "In YouTube or X, tap Share → Save to PhonePal. The transcript or post is fetched and turned into " +
+            "In YouTube, Instagram or X, tap Share → Save to PhonePal. The transcript or post is fetched and turned into " +
                 "a summary, key points and content ideas, saved here.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -233,7 +234,7 @@ private fun AddDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
         text = {
             OutlinedTextField(
                 value = text, onValueChange = { text = it },
-                placeholder = { Text("Paste a YouTube / X / web link, or type an idea") },
+                placeholder = { Text("Paste a YouTube / Instagram / X / web link, or type an idea") },
                 minLines = 3,
             )
         },

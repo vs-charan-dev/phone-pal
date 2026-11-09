@@ -53,14 +53,78 @@ class Summarizer(private val apiKey: String, private val model: String, private 
         json = false,
     ).trim()
 
-    private fun generate(system: String, user: String, json: Boolean): String {
+    /**
+     * Writes a transcript of a short video (an Instagram reel) by sending the video itself to Gemini.
+     * Small files go inline; bigger ones are uploaded through the Files API first.
+     */
+    fun transcribe(video: ByteArray, mime: String): String {
+        val media = if (video.size <= INLINE_LIMIT) {
+            JSONObject().put("inline_data", JSONObject()
+                .put("mime_type", mime)
+                .put("data", android.util.Base64.encodeToString(video, android.util.Base64.NO_WRAP)))
+        } else {
+            JSONObject().put("file_data", JSONObject().put("mime_type", mime).put("file_uri", upload(video, mime)))
+        }
+        val parts = JSONArray()
+            .put(media)
+            .put(JSONObject().put("text", TRANSCRIBE_PROMPT))
+        return generate(
+            "You transcribe short social media videos accurately. Plain text only.",
+            parts,
+            json = false,
+        ).trim()
+    }
+
+    /** Gemini Files API resumable upload; waits until the video is processed. Returns the file URI. */
+    private fun upload(bytes: ByteArray, mime: String): String {
+        val start = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/upload/v1beta/files")
+            .header("x-goog-api-key", apiKey)
+            .header("X-Goog-Upload-Protocol", "resumable")
+            .header("X-Goog-Upload-Command", "start")
+            .header("X-Goog-Upload-Header-Content-Length", bytes.size.toString())
+            .header("X-Goog-Upload-Header-Content-Type", mime)
+            .post(JSONObject().put("file", JSONObject().put("display_name", "phonepal-reel")).toString()
+                .toRequestBody("application/json".toMediaType()))
+            .build()
+        val uploadUrl = client.newCall(start).execute().use { r ->
+            if (!r.isSuccessful) throw IOException("Gemini upload start failed: HTTP ${r.code} ${r.body?.string()?.take(200)}")
+            r.header("X-Goog-Upload-URL") ?: throw IOException("Gemini upload: no upload URL")
+        }
+        val send = Request.Builder().url(uploadUrl)
+            .header("X-Goog-Upload-Offset", "0")
+            .header("X-Goog-Upload-Command", "upload, finalize")
+            .post(bytes.toRequestBody(mime.toMediaType()))
+            .build()
+        var file = client.newCall(send).execute().use { r ->
+            val t = r.body?.string().orEmpty()
+            if (!r.isSuccessful) throw IOException("Gemini upload failed: HTTP ${r.code} ${t.take(200)}")
+            JSONObject(t).getJSONObject("file")
+        }
+        // Videos are processed before they can be used.
+        repeat(30) {
+            when (file.optString("state")) {
+                "ACTIVE", "" -> return file.getString("uri")
+                "FAILED" -> throw PermanentAiException("Gemini could not process the video")
+            }
+            Thread.sleep(2000)
+            val get = Request.Builder().url("$BASE/${file.getString("name")}").header("x-goog-api-key", apiKey).build()
+            file = client.newCall(get).execute().use { r -> JSONObject(r.body?.string().orEmpty()) }
+        }
+        throw IOException("Gemini is still processing the video; will retry")
+    }
+
+    private fun generate(system: String, user: String, json: Boolean): String =
+        generate(system, JSONArray().put(JSONObject().put("text", user)), json)
+
+    private fun generate(system: String, userParts: JSONArray, json: Boolean): String {
         val config = JSONObject()
         if (json) config.put("responseMimeType", "application/json")
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", JSONArray().put(JSONObject()
                 .put("role", "user")
-                .put("parts", JSONArray().put(JSONObject().put("text", user)))))
+                .put("parts", userParts)))
             .put("generationConfig", config)
 
         val req = Request.Builder()
@@ -101,7 +165,7 @@ class Summarizer(private val apiKey: String, private val model: String, private 
     private fun systemPrompt(): String = buildString {
         append(
             """
-            You turn things the user saved while browsing (YouTube videos, X posts, web pages, notes) into
+            You turn things the user saved while browsing (YouTube videos, Instagram reels, X posts, web pages, notes) into
             an organized personal knowledge base. The user is a content creator: they save things because
             they found them interesting and want to reuse the ideas later in their own content.
 
@@ -133,6 +197,7 @@ class Summarizer(private val apiKey: String, private val model: String, private 
                 Source.YOUTUBE -> "YouTube video"
                 Source.X -> "X (Twitter) post"
                 Source.WEB -> "Web page"
+                Source.INSTAGRAM -> "Instagram post / reel (text is the caption plus a transcript of the video)"
                 Source.APP -> "Text read from the screen of another app (e.g. Instagram, Reddit, LinkedIn); it may include UI labels, ignore those"
                 Source.NOTE -> "Text the user shared"
             }
@@ -172,6 +237,17 @@ class Summarizer(private val apiKey: String, private val model: String, private 
 
     companion object {
         private const val BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+        /** Inline request limit is ~20 MB after base64 (+33%), so stay well under it. */
+        private const val INLINE_LIMIT = 14 * 1024 * 1024
+
+        private val TRANSCRIBE_PROMPT = """
+            Transcribe everything that is said in this video, word for word, in the language it is spoken.
+            If there are several speakers, start a new line for each one.
+            Then add a line "On-screen text:" with any important text shown on screen (skip if none).
+            If nobody speaks, write "(no speech)" and then briefly describe what the video shows.
+            Output only the transcript, no commentary.
+        """.trimIndent()
 
         /** Models this key can call generateContent on, e.g. "gemini-flash-latest". */
         fun listModels(apiKey: String): List<String> {

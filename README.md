@@ -26,3 +26,16 @@ On first launch, open **Settings** and paste your Gemini API key from Google AI 
 ## Known limits
 - YouTube changes its internals from time to time. When transcripts stop working, the item is still summarized from the title and description, and the detail screen shows why.
 - For X, only the post text is captured; images, videos and full threads are not.
+
+## Payment and banking apps
+
+Many payment/banking apps (PhonePe, Paytm, bank apps, …) refuse to work while a screen-reading
+accessibility service is on. PhonePal never reads them, and when one opens it switches its accessibility
+service off. To let it switch back on automatically when you leave the payment app, grant this once:
+
+```bash
+adb shell pm grant com.phonepal android.permission.WRITE_SECURE_SETTINGS
+```
+
+Without that, use the **PhonePal tracking** quick-settings tile to turn it back on. Settings → Payment apps
+shows which installed apps are protected and lets you add more package names.

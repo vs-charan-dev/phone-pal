@@ -8,6 +8,12 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <!-- Personal app: needed to show other apps' names in screen time -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <!-- Payment guard: lets PhonePal switch its accessibility service off while a payment app is open
+         and back on afterwards. Grant once: adb shell pm grant com.phonepal android.permission.WRITE_SECURE_SETTINGS -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".PhonePalApp"
@@ -29,6 +35,11 @@
         </activity>
 
         <!-- Appears in the share sheet as "Save to PhonePal". Invisible, finishes immediately. -->
+        <activity
+            android:name=".ui.InstagramLoginActivity"
+            android:exported="false"
+            android:label="Connect Instagram" />
+
         <activity
             android:name=".ui.ShareActivity"
             android:exported="true"
@@ -67,6 +78,29 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!-- Turns the accessibility service back on after you leave a payment app -->
+        <service
+            android:name=".tracking.PaymentGuardService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Re-enables the user's own accessibility service after a payment app is closed" />
+        </service>
+
+        <!-- Quick-settings tile: pause / resume screen reading -->
+        <service
+            android:name=".tracking.PalTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher"
+            android:label="PhonePal tracking"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
         </service>
     </application>
 </manifest>

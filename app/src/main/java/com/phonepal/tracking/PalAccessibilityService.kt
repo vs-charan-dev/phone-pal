@@ -63,11 +63,34 @@ class PalAccessibilityService : AccessibilityService(), SharedPreferences.OnShar
     override fun onAccessibilityEvent(e: AccessibilityEvent) {
         val pkg = e.packageName?.toString() ?: return
         if (pkg == packageName) return
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            if (PaymentGuard.isPayment(this, pkg)) pauseFor(pkg)
+            return
+        }
         when (e.eventType) {
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (settings.autoSaveLikes) onClick(pkg, e)
             AccessibilityEvent.TYPE_VIEW_SCROLLED, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ->
                 if (settings.trackReading && pkg in Capture.FEED_APPS) maybeScan(pkg)
         }
+    }
+
+    // ---------------------------------------------------------------- payment apps
+
+    private var paused = false
+
+    /** A payment/banking app opened: stop reading screens and switch the service off so it isn't blocked. */
+    private fun pauseFor(pkg: String) {
+        if (paused) return
+        paused = true
+        hideBubble()
+        Log.i(TAG, "Payment app $pkg opened, pausing")
+        if (PaymentGuard.canToggle(this)) {
+            // Start the watcher while we're still bound (lets it start in the foreground), then remove ourselves.
+            PaymentGuardService.start(this, pkg)
+            if (PaymentGuard.setServiceEnabled(this, false)) return
+        }
+        toast("PhonePal paused for ${Capture.appLabel(this, pkg)}. Turn it back on with the PhonePal quick-settings tile.")
+        disableSelf()
     }
 
     // ---------------------------------------------------------------- reading tracker
@@ -100,6 +123,7 @@ class PalAccessibilityService : AccessibilityService(), SharedPreferences.OnShar
     // ---------------------------------------------------------------- likes
 
     private fun onClick(pkg: String, e: AccessibilityEvent) {
+        if (PaymentGuard.isPayment(this, pkg)) return
         val node = e.source
         val desc = (e.contentDescription ?: node?.contentDescription)?.toString() ?: return
         if (desc.length > 80 || !LIKE.containsMatchIn(desc)) return
@@ -199,6 +223,7 @@ class PalAccessibilityService : AccessibilityService(), SharedPreferences.OnShar
             ?: return toast("Nothing to capture here")
         val pkg = root.packageName?.toString() ?: return
         if (pkg == packageName) return toast("Open the app you want to capture, then tap the bubble")
+        if (PaymentGuard.isPayment(this, pkg)) return toast("PhonePal doesn't read payment apps")
 
         if (pkg == Capture.YOUTUBE || pkg == "com.google.android.apps.youtube.music") {
             NowPlaying.get(pkg, maxAgeMs = 30 * 60_000)?.let { now ->

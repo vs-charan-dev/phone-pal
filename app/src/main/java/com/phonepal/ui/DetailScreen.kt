@@ -48,6 +48,7 @@ import com.phonepal.data.Item
 import com.phonepal.data.ItemRepository
 import com.phonepal.data.Status
 import com.phonepal.work.ProcessWorker
+import com.phonepal.work.RagSyncWorker
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,7 +111,9 @@ fun DetailScreen(repo: ItemRepository, id: Long, onBack: () -> Unit) {
                 }
             }
 
-            NoteEditor(it) { note -> scope.launch { repo.update(it.copy(myNote = note)) } }
+            NoteEditor(it) { note ->
+                scope.launch { repo.update(it.copy(myNote = note)); RagSyncWorker.enqueue(ctx, delaySec = 30) }
+            }
 
             Row(Modifier.padding(vertical = 12.dp)) {
                 it.url?.let { u -> OutlinedButton(onClick = { openUrl(ctx, u) }) { Text("Open original") } }
@@ -145,7 +148,7 @@ fun DetailScreen(repo: ItemRepository, id: Long, onBack: () -> Unit) {
         confirmButton = {
             TextButton(onClick = {
                 confirmDelete = false
-                scope.launch { repo.delete(id); onBack() }
+                scope.launch { repo.delete(id); RagSyncWorker.enqueue(ctx); onBack() }
             }) { Text("Delete") }
         },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },

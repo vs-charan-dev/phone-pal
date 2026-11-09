@@ -33,6 +33,12 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("track_reading", true)
         set(v) = prefs.edit().putBoolean("track_reading", v).apply()
 
+    /** Extra package names PhonePal must never read (on top of the built-in payment/bank list). */
+    var extraPaymentApps: Set<String>
+        get() = prefs.getString("extra_payment_apps", "").orEmpty()
+            .split(',', '\n', ' ').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        set(v) = prefs.edit().putString("extra_payment_apps", v.joinToString(",")).apply()
+
     var bubbleX: Int
         get() = prefs.getInt("bubble_x", -1)
         set(v) = prefs.edit().putInt("bubble_x", v).apply()

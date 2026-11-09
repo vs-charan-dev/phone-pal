@@ -11,6 +11,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -31,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import com.phonepal.PhonePalApp
 import com.phonepal.data.Status
 import com.phonepal.work.ProcessWorker
+import com.phonepal.work.RagSyncWorker
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(app.settings, onClose = {
                             showSettings = false
                             // Items that were waiting only for an API key get processed now.
+                            if (app.settings.apiKey.isNotBlank()) RagSyncWorker.enqueue(this@MainActivity)
                             if (app.settings.apiKey.isNotBlank()) lifecycleScope.launch {
                                 app.repo.all()
                                     .filter { it.status == Status.FAILED && it.error?.contains("API key") == true }
@@ -69,17 +72,25 @@ class MainActivity : ComponentActivity() {
                                     icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Library") },
                                 )
                                 NavigationBarItem(
+                                    selected = tab == 2, onClick = { tab = 2 },
+                                    icon = { Icon(Icons.Default.Search, null) }, label = { Text("Ask") },
+                                )
+                                NavigationBarItem(
                                     selected = tab == 1, onClick = { tab = 1 },
                                     icon = { Icon(Icons.Default.DateRange, null) }, label = { Text("Insights") },
                                 )
                             }
                         }
-                        if (tab == 0) LibraryScreen(
-                            repo = app.repo,
-                            onOpen = { openId = it },
-                            onSettings = { showSettings = true },
-                            bottomBar = nav,
-                        ) else InsightsScreen(onSettings = { showSettings = true }, bottomBar = nav)
+                        when (tab) {
+                            0 -> LibraryScreen(
+                                repo = app.repo,
+                                onOpen = { openId = it },
+                                onSettings = { showSettings = true },
+                                bottomBar = nav,
+                            )
+                            2 -> AskScreen(onOpen = { openId = it }, bottomBar = nav)
+                            else -> InsightsScreen(onSettings = { showSettings = true }, bottomBar = nav)
+                        }
                     }
                 }
             }

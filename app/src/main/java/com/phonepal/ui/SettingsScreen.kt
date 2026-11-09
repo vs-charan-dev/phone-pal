@@ -29,10 +29,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.phonepal.ai.Summarizer
+import com.phonepal.fetch.InstagramSession
 import com.phonepal.data.Settings
+import com.phonepal.tracking.PaymentGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,9 +50,21 @@ fun SettingsScreen(settings: Settings, onClose: () -> Unit) {
     var key by remember { mutableStateOf(settings.apiKey) }
     var model by remember { mutableStateOf(settings.model) }
     var profile by remember { mutableStateOf(settings.creatorProfile) }
+    var extraPay by remember { mutableStateOf(settings.extraPaymentApps.joinToString(", ")) }
+    val ctx = LocalContext.current
+    val protectedApps = remember { PaymentGuard.installedProtected(ctx) }
+    val canToggle = remember { PaymentGuard.canToggle(ctx) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var modelsStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    var igLoggedIn by remember { mutableStateOf(InstagramSession.isLoggedIn()) }
+    // Re-check when coming back from the login screen.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) igLoggedIn = InstagramSession.isLoggedIn() }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
 
     Scaffold(
         topBar = {
@@ -97,8 +116,42 @@ fun SettingsScreen(settings: Settings, onClose: () -> Unit) {
                 placeholder = { Text("e.g. I make short videos about AI tools for students on Instagram + YouTube") },
                 minLines = 3, modifier = Modifier.fillMaxWidth(),
             )
+            Text("Instagram", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Instagram only shows reels to logged-in people. Log in once on Instagram's own page here and " +
+                    "PhonePal can open the reels you save, transcribe them with Gemini and summarize them. " +
+                    "Your password goes to Instagram, not PhonePal.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (igLoggedIn) {
+                Text("Connected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                OutlinedButton(onClick = { InstagramSession.logOut(); igLoggedIn = false }) { Text("Disconnect Instagram") }
+            } else {
+                Button(onClick = { ctx.startActivity(Intent(ctx, InstagramLoginActivity::class.java)) }) { Text("Connect Instagram") }
+            }
+            Text("Payment apps", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "PhonePal never reads payment or banking apps. When one opens, PhonePal switches its accessibility " +
+                    "service off so the app isn't blocked" +
+                    (if (canToggle) ", and turns it back on when you leave." else
+                        ". To have it turn back on by itself, run once from a computer:\n" +
+                            "adb shell pm grant com.phonepal android.permission.WRITE_SECURE_SETTINGS\n" +
+                            "Until then, turn it back on with the \"PhonePal tracking\" quick-settings tile."),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                "Protected on this phone: " + protectedApps.ifEmpty { listOf("none found") }.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedTextField(
+                value = extraPay, onValueChange = { extraPay = it },
+                label = { Text("More apps to leave alone (package names)") },
+                placeholder = { Text("e.g. com.example.mybank, com.example.wallet") },
+                modifier = Modifier.fillMaxWidth(),
+            )
             Button(
                 onClick = {
+                    settings.extraPaymentApps = extraPay.split(',', '\n', ' ').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
                     settings.apiKey = key
                     settings.model = model
                     settings.creatorProfile = profile
